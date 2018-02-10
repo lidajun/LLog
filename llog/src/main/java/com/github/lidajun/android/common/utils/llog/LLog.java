@@ -181,7 +181,7 @@ public class LLog {
             return (String) o[0];
         }
         for (Object anO : o) {
-            sSb.append(anO.toString()).append(" ");
+            sSb.append(null == anO ? "null" : anO.toString()).append(" ");
         }
         String s = sSb.toString();
         if (TextUtils.isEmpty(s)) {
