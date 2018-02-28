@@ -7,11 +7,11 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
-import android.support.annotation.NonNull;
-import android.support.v7.appcompat.BuildConfig;
 import android.text.TextUtils;
 import android.text.format.Formatter;
 import android.util.Log;
+
+import com.github.lidajun.android.common.llog.BuildConfig;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -20,6 +20,7 @@ import java.io.IOException;
 import java.io.PrintWriter;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.HashMap;
 import java.util.Locale;
 
 /**
@@ -42,6 +43,7 @@ public class LLog {
     private static File sFile;
     private static LogHandler sHandler;
     private static Throwable sThrowable = new Throwable();
+    private static HashMap<String, Long> timeMap;
 
     private LLog() {
     }
@@ -50,7 +52,7 @@ public class LLog {
         sShowLevel = level;
     }
 
-    public static void saveLevel(@NonNull Context context, @NonNull String dirPath, @NonNull String fileName, int saveLevel) throws IOException {
+    public static void saveLevel(Context context, String dirPath, String fileName, int saveLevel) throws IOException {
         File dir = new File(dirPath);
         if (!dir.exists()) {
             if (!dir.mkdirs()) {
@@ -64,7 +66,7 @@ public class LLog {
         String baseInfo = getBaseInfo();
         i(baseInfo);
         if (!sFile.exists()) {
-            PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(sFile,true)));
+            PrintWriter pw = new PrintWriter(new BufferedWriter(new FileWriter(sFile, true)));
             pw.println(baseInfo);
             pw.close();
             resetSb();
@@ -108,6 +110,38 @@ public class LLog {
         }
     }
 
+    public static void iStartTiming(Object... objects) {
+        if (null == timeMap) {
+            timeMap = new HashMap<>(1);
+        }
+        String tagString = getTagString(objects);
+        String tag = null == tagString ? getTag(2) : tagString;
+        long l = System.currentTimeMillis();
+        timeMap.put(tag, l);
+        i(tag, objects, "start time=", l);
+    }
+
+    public static void iStopTiming(Object... objects) {
+        String tagString = getTagString(objects);
+        String tag = null == tagString ? getTag(2) : tagString;
+        long c = System.currentTimeMillis();
+        Long l = timeMap.get(tag);
+        i(tag, objects, "stop time=", c, null == l || 0 == l ? "tag is null" : String.format(Locale.US, " duration=%d", c - l));
+        timeMap.remove(tag);
+    }
+
+    private static String getTagString(Object[] o) {
+        String tag = null;
+        if (null != o && o.length > 0) {
+            Object o1 = o[0];
+            if (o1 instanceof String) {
+                tag = (String) o1;
+                o[0] = "";
+            }
+        }
+        return tag;
+    }
+
     public static void v(Object... o) {
         show(VERBOSE, null, o);
     }
@@ -128,23 +162,23 @@ public class LLog {
         show(ERROR, null, o);
     }
 
-    public static void v(String tag, Object msg) {
+    public static void v(String tag, Object... msg) {
         show(VERBOSE, tag, msg);
     }
 
-    public static void d(String tag, Object msg) {
+    public static void d(String tag, Object... msg) {
         show(DEBUG, tag, msg);
     }
 
-    public static void i(String tag, String msg) {
+    public static void i(String tag, Object... msg) {
         show(INFO, tag, msg);
     }
 
-    public static void w(String tag, String msg) {
+    public static void w(String tag, Object... msg) {
         show(WARN, tag, msg);
     }
 
-    public static void e(String tag, String msg) {
+    public static void e(String tag, Object... msg) {
         show(ERROR, tag, msg);
     }
 
@@ -177,26 +211,40 @@ public class LLog {
     }
 
     private static String getString(Object[] o) {
+        return getString(o, true);
+    }
+
+    private static String getString(Object[] o, boolean trim) {
+        if (null != o && 0 == o.length) {
+            return " ";
+        }
         if (o.length == 1 && o[0] instanceof String) {
             return (String) o[0];
         }
         for (Object anO : o) {
-            sSb.append(null == anO ? "null" : anO.toString()).append(" ");
+            if (anO instanceof Object[]) {
+                sSb.append(getString((Object[]) anO, false));
+            } else {
+                sSb.append(null == anO ? "null" : anO.toString()).append(" ");
+            }
         }
-        String s = sSb.toString();
+        String s = trim ? sSb.toString().trim() : sSb.toString();
+        resetSb();
         if (TextUtils.isEmpty(s)) {
             s = " ";
-        } else {
-            resetSb();
         }
         return s;
     }
 
     private static String getTag() {
+        return getTag(3);
+    }
+
+    private static String getTag(int start) {
         StackTraceElement[] trace = sThrowable.fillInStackTrace().getStackTrace();
         String callingClass = "";
         String caller = "";
-        for (int i = 3; i < trace.length; i++) {
+        for (int i = start; i < trace.length; i++) {
             StackTraceElement stackTraceElement = trace[i];
             Class<?> clazz = stackTraceElement.getClass();
             if (!clazz.equals(LLog.class)) {
